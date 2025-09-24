@@ -45,22 +45,23 @@ An azd environment variable is stored by the azd CLI for each environment. It is
 When adding new azd environment variables, update:
 
 1. infra/main.parameters.json : Add the new parameter with a Bicep-friendly variable name and map to the new environment variable
-1. infra/main.bicep: Add the new Bicep parameter at the top, and add it to the `appEnvVariables` object
-1. .azdo/pipelines/azure-dev.yml: Add the new environment variable under `env` section
-1. .github/workflows/azure-dev.yml: Add the new environment variable under `env` section
+2. infra/main.bicep: Add the new Bicep parameter at the top, and add it to the `appEnvVariables` object
+3. .azdo/pipelines/azure-dev.yml: Add the new environment variable under `env` section
+4. .github/workflows/azure-dev.yml: Add the new environment variable under `env` section
 
 ## Adding a new setting to "Developer Settings" in RAG app
 
 When adding a new developer setting, update:
 
 * frontend:
+
   * app/frontend/src/api/models.ts : Add to ChatAppRequestOverrides
   * app/frontend/src/components/Settings.tsx : Add a UI element for the setting
   * app/frontend/src/locales/*/translations.json: Add a translation for the setting label/tooltip for all languages
   * app/frontend/src/pages/chat/Chat.tsx: Add the setting to the component, pass it to Settings
   * app/frontend/src/pages/ask/Ask.tsx: Add the setting to the component, pass it to Settings
-
 * backend:
+
   * app/backend/approaches/chatreadretrieveread.py :  Retrieve from overrides parameter
   * app/backend/approaches/retrievethenread.py : Retrieve from overrides parameter
   * app/backend/app.py: Some settings may need to be sent down in the /config route.

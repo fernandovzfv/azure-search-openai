@@ -245,15 +245,51 @@ class DocumentAnalysisParser(Parser):
             logger.warning("Figure %s has more than one bounding region, using the first one", figure_id)
         first_region = figure.bounding_regions[0]
         # To learn more about bounding regions, see https://aka.ms/bounding-region
-        bounding_box = (
-            first_region.polygon[0],  # x0 (left)
-            first_region.polygon[1],  # y0 (top
-            first_region.polygon[4],  # x1 (right)
-            first_region.polygon[5],  # y1 (bottom)
-        )
+        if len(first_region.polygon) < 8:
+            logger.warning("Figure %s has invalid polygon, skipping", figure_id)
+            return ImageOnPage(
+                bytes=b"",
+                page_num=page_number - 1,
+                figure_id=figure_id,
+                bbox=(0, 0, 0, 0),
+                filename=figure_filename,
+                description=f"<figure><figcaption>{figure_id} {figure_title}</figcaption></figure>",
+            )
+
+        # Extract all points from polygon
+        points = [(first_region.polygon[i], first_region.polygon[i+1]) for i in range(0, 8, 2)]
+        min_x = min(x for x, y in points)
+        max_x = max(x for x, y in points)
+        min_y = min(y for x, y in points)
+        max_y = max(y for x, y in points)
+
+        # Validate bounding box
+        if max_x <= min_x or max_y <= min_y:
+            logger.warning("Figure %s has invalid bounding box (min_x=%.2f, max_x=%.2f, min_y=%.2f, max_y=%.2f), skipping", figure_id, min_x, max_x, min_y, max_y)
+            return ImageOnPage(
+                bytes=b"",
+                page_num=page_number - 1,
+                figure_id=figure_id,
+                bbox=(0, 0, 0, 0),
+                filename=figure_filename,
+                description=f"<figure><figcaption>{figure_id} {figure_title}</figcaption></figure>",
+            )
+
+        bounding_box = (min_x, min_y, max_x, max_y)
         page_number = first_region["pageNumber"]  # 1-indexed
-        cropped_img, bbox_pixels = DocumentAnalysisParser.crop_image_from_pdf_page(doc, page_number - 1, bounding_box)
-        figure_description = await media_describer.describe_image(cropped_img)
+        try:
+            cropped_img, bbox_pixels = DocumentAnalysisParser.crop_image_from_pdf_page(doc, page_number - 1, bounding_box)
+            figure_description = await media_describer.describe_image(cropped_img)
+        except (ValueError, SystemError) as e:
+            logger.warning("Failed to process figure %s: %s, skipping", figure_id, e)
+            return ImageOnPage(
+                bytes=b"",
+                page_num=page_number - 1,
+                figure_id=figure_id,
+                bbox=(0, 0, 0, 0),
+                filename=figure_filename,
+                description=f"<figure><figcaption>{figure_id} {figure_title}</figcaption></figure>",
+            )
         return ImageOnPage(
             bytes=cropped_img,
             page_num=page_number - 1,  # Convert to 0-indexed
@@ -307,6 +343,9 @@ class DocumentAnalysisParser(Parser):
         page_dpi = 300
         page = doc.load_page(page_number)
         pix = page.get_pixmap(matrix=pymupdf.Matrix(page_dpi / bbox_dpi, page_dpi / bbox_dpi), clip=rect)
+
+        if pix.width <= 0 or pix.height <= 0:
+            raise ValueError(f"Cropped image has invalid dimensions: width={pix.width}, height={pix.height}")
 
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         bytes_io = io.BytesIO()

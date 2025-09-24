@@ -6,7 +6,7 @@ from typing import Optional
 import aiohttp
 from azure.core.credentials_async import AsyncTokenCredential
 from azure.identity.aio import get_bearer_token_provider
-from openai import AsyncOpenAI, RateLimitError
+from openai import AsyncOpenAI, BadRequestError, RateLimitError
 from rich.progress import Progress
 from tenacity import (
     AsyncRetrying,
@@ -130,7 +130,7 @@ class MultimodalModelDescriber(MediaDescriber):
         image_datauri = f"data:image/png;base64,{image_base64}"
 
         async for attempt in AsyncRetrying(
-            retry=retry_if_exception_type(RateLimitError),
+            retry=retry_if_exception_type((RateLimitError, BadRequestError)),
             wait=wait_random_exponential(min=15, max=60),
             stop=stop_after_attempt(15),
             before_sleep=before_retry_sleep,
@@ -138,7 +138,7 @@ class MultimodalModelDescriber(MediaDescriber):
             with attempt:
                 response = await self.openai_client.chat.completions.create(
                     model=self.model if self.deployment is None else self.deployment,
-                    max_tokens=500,
+                    max_completion_tokens=2000,
                     messages=[
                         {
                             "role": "system",
